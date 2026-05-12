@@ -1,21 +1,3 @@
-#!/usr/bin/python3
-
-import os
-import sys
-import yaml
-import autossh.ssh
-
-if len(sys.argv)==1 or (len(sys.argv)>1 and sys.argv[1]=="-h"):
-    print("")
-    print("Usage:")
-    print("  assh [-h] destination")
-    print("")
-    sys.exit(1)
-
-s = autossh.ssh.new(sys.argv[1])
-ok, err = s.login()
-if not ok:
-    print(err)
-    sys.exit(1)
-s.autowinsize()
-s.interact()
+#!/usr/bin/env python3
+from autossh.cli.assh import main
+main()

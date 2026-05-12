@@ -10,6 +10,15 @@ setuptools.setup(name="autossh",
         python_requires=">=3.6",
         install_requires=['pexpect', 'pyyaml'],
         packages=setuptools.find_packages(),
-        scripts=["bin/assh", "bin/apush", "bin/apull", "bin/acat", "bin/aedit", "bin/qssh"],
+        entry_points={
+            "console_scripts": [
+                "assh  = autossh.cli.assh:main",
+                "apush = autossh.cli.apush:main",
+                "apull = autossh.cli.apull:main",
+                "acat  = autossh.cli.acat:main",
+                "aedit = autossh.cli.aedit:main",
+                "qssh  = autossh.cli.qssh:main",
+            ],
+        },
         include_package_data=True,
         zip_safe=False)

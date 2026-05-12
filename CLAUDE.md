@@ -28,7 +28,9 @@ Runtime dependencies (declared in `setup.py`): `pexpect`, `pyyaml`.
 
 ## Architecture
 
-The `bin/` scripts are thin entry points; all SSH/SCP behavior lives in the `autossh` package.
+The CLI commands are defined as `console_scripts` entry points in `setup.py`, pointing at `autossh.cli.<cmd>:main`. The files under `bin/` are thin shims (`from autossh.cli.<cmd> import main; main()`) kept only for repo-local dev (`PYTHONPATH=. python3 bin/<cmd>`); when installed via pip they are replaced by setuptools-generated wrappers with the correct interpreter shebang.
+
+All SSH/SCP behavior lives in the `autossh` package.
 
 - **`autossh/ssh.py` — `SSH` class**: the core. `login()` spawns `ssh`, `jump()` issues an `ssh` command inside an already-logged-in session (used by `qssh` to hop through a bastion called `mnet`), and `send_file()`/`pull_file()` spawn `scp`. All four methods drive a `pexpect.expect()` loop against the same default pattern list: `["yes/no", "assword:", "[#\$]", TIMEOUT, EOF]`. `login()`/`jump()` accept `expects`/`reacts` extension arrays — extra patterns are appended after the defaults, and the matching `reacts` entry (a string or a zero-arg callable) is `sendline`'d when matched. `qssh`'s token prompt is implemented entirely via this extension mechanism, not by editing `ssh.py`.
 - **`autossh/lookup.py` — `Lookup`**: parses the host file. Each non-comment line is `host[:port][[alias]]  user  password`. Two dicts are maintained (`__m0` keyed by host, `__m1` keyed by alias); `get()` checks host first, then alias. `port` is the string `0` when unset — callers in `ssh.py` test `port != 0` to decide whether to add `-p` / `-P`.
@@ -37,9 +39,10 @@ The `bin/` scripts are thin entry points; all SSH/SCP behavior lives in the `aut
 
 ### Adding a new command
 
-1. Add a script under `bin/` (mirror the pattern in `bin/assh`: parse args, `autossh.ssh.new(dest)`, `login()`, `autowinsize()`, `interact()` or a file transfer).
-2. Add the script path to the `scripts=[...]` list in `setup.py`.
-3. Add it to the `rm -fv` line in `uninstall` so uninstall stays in sync.
+1. Create `autossh/cli/<name>.py` with a `def main():` (mirror `autossh/cli/assh.py`: parse args, `autossh.ssh.new(dest)`, `login()`, `autowinsize()`, `interact()` or a file transfer).
+2. Add `"<name> = autossh.cli.<name>:main"` to the `console_scripts` list in `setup.py`.
+3. Add a 3-line shim at `bin/<name>` (`#!/usr/bin/env python3` + `from autossh.cli.<name> import main` + `main()`) so the repo-local dev workflow keeps working.
+4. Add the script name to the `rm -fv` line in `uninstall` so uninstall stays in sync.
 
 ### Host file & config locations
 
