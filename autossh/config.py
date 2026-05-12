@@ -1,4 +1,5 @@
 import os
+import yaml
 
 config_file = os.path.expanduser("~/.config/autossh/config.yaml")
 
