@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`autossh` is a Python 3 toolkit that wraps `ssh`/`scp` via `pexpect` to provide password-less, alias-based access to hosts listed in a flat host file. It installs a set of CLI commands (`assh`, `apush`, `apull`, `acat`, `aedit`, `qssh`) that share the same `autossh` Python package for host lookup and pexpect-driven session control.
+`autossh` is a Python 3 toolkit that wraps `ssh`/`scp` via `pexpect` to provide password-less, alias-based access to hosts listed in a flat host file. It installs a set of CLI commands (`assh`, `apush`, `apull`, `acat`, `aedit`) that share the same `autossh` Python package for host lookup and pexpect-driven session control.
 
 Python 2 is not supported.
 
@@ -32,9 +32,9 @@ The CLI commands are defined as `console_scripts` entry points in `setup.py`, po
 
 All SSH/SCP behavior lives in the `autossh` package.
 
-- **`autossh/ssh.py` — `SSH` class**: the core. `login()` spawns `ssh`, `jump()` issues an `ssh` command inside an already-logged-in session (used by `qssh` to hop through a bastion called `mnet`), and `send_file()`/`pull_file()` spawn `scp`. All four methods drive a `pexpect.expect()` loop against the same default pattern list: `["yes/no", "assword:", "[#\$]", TIMEOUT, EOF]`. `login()`/`jump()` accept `expects`/`reacts` extension arrays — extra patterns are appended after the defaults, and the matching `reacts` entry (a string or a zero-arg callable) is `sendline`'d when matched. `qssh`'s token prompt is implemented entirely via this extension mechanism, not by editing `ssh.py`.
+- **`autossh/ssh.py` — `SSH` class**: the core. `login()` spawns `ssh`, `jump()` issues an `ssh` command inside an already-logged-in session (intended for bastion-hopping), and `send_file()`/`pull_file()` spawn `scp`. All four methods drive a `pexpect.expect()` loop against the same default pattern list: `["yes/no", "assword:", "[#\$]", TIMEOUT, EOF]`. `login()`/`jump()` accept `expects`/`reacts` extension arrays — extra patterns are appended after the defaults, and the matching `reacts` entry (a string or a zero-arg callable) is `sendline`'d when matched. Custom auth flows (e.g. a 2FA token prompt on a bastion) can be layered on top via this extension mechanism without editing `ssh.py` — historically a `qssh` command lived here doing exactly that, but it was removed for being too site-specific.
 - **`autossh/lookup.py` — `Lookup`**: parses the host file. Each non-comment line is `host[:port][[alias]]  user  password`. Two dicts are maintained (`__m0` keyed by host, `__m1` keyed by alias); `get()` checks host first, then alias. `port` is the string `0` when unset — callers in `ssh.py` test `port != 0` to decide whether to add `-p` / `-P`.
-- **`autossh/config.py`**: loads `~/.config/autossh/config.yaml` (currently only `timeout`); defaults are returned silently on any error. Note: this file references `yaml` but does not import it — `ssh.py` happens to import yaml first, masking the bug. Be aware if running `config.py` standalone.
+- **`autossh/config.py`**: loads `~/.config/autossh/config.yaml` (currently only `timeout`); defaults are returned silently on any error.
 - **`autossh/winsize.py` — `WatchDog`**: SIGWINCH-based terminal resize forwarding to the pexpect child. Enabled via `SSH.autowinsize()`; every interactive CLI calls this before `interact()`.
 
 ### Adding a new command
@@ -46,9 +46,8 @@ All SSH/SCP behavior lives in the `autossh` package.
 
 ### Host file & config locations
 
-- Host file: `~/.config/autossh/hosts` (override via `config.yaml` → `host_file`). Sample at `config/autossh/hosts`.
+- Host file: `~/.config/autossh/hosts` (override via `config.yaml` → `host_file`). Sample at `config/autossh/hosts`. If absent, `aedit` seeds a commented template on first run.
 - autossh config: `~/.config/autossh/config.yaml` (keys: `timeout`).
-- qssh config: `~/.config/qssh/config.yaml` (keys: `cache.file`, `cache.ttl` — controls the bastion token cache file used by `bin/qssh`).
 
 User `None` and password `None` (literal strings) mean anonymous — `ssh.py` branches on `user == "None"` to drop the `user@` prefix.
 

@@ -42,7 +42,6 @@ Run `-h` for help messages.
 - apull: Pull file from remote to local.
 - acat : Cat host file.
 - aedit: Edit host file.
-- qssh : Jump destination with mnet.
 
 ## TODO
 
