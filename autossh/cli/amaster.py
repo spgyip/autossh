@@ -54,6 +54,17 @@ def _write_host_file(host_file, content):
         f.write(content)
 
 
+def _offer_dotenv_save(master):
+    """Always offer to save master key to .env."""
+    try:
+        ans = input("Save master key to ~/.config/autossh/.env? [Y/n] ").strip().lower()
+    except EOFError:
+        ans = "y"
+    if ans != "n":
+        save_to_dotenv(master)
+        print("~/.config/autossh/.env updated.")
+
+
 def cmd_init(host_file):
     """Treat all passwords as plaintext and encrypt with a new master key."""
     content = _load_host_file(host_file)
@@ -69,7 +80,7 @@ def cmd_init(host_file):
     _write_host_file(host_file, new_content)
     print("Hosts file encrypted.")
 
-    _offer_dotenv_update(new_master)
+    _offer_dotenv_save(new_master)
 
 
 def cmd_rekey(host_file):

@@ -56,27 +56,19 @@ def main():
     with open(host_file) as f:
         original_content = f.read()
 
-    # No password fields — open directly in vim (nothing to encrypt/decrypt)
-    if not has_password_fields(original_content):
-        os.execvp("vim", ["vim", host_file])
-        return  # unreachable
+    # If original file has password fields, load master key and decrypt for editing
+    file_key = None
+    if has_password_fields(original_content):
+        master = load_master_key(offer_save=True)
+        file_key = derive_file_key(master)
+        try:
+            original_content = transform_hosts(original_content, lambda pw: decrypt(file_key, pw))
+        except InvalidTag:
+            print("Error: wrong master password.")
+            print("Run 'amaster init' to re-encrypt your hosts file.")
+            sys.exit(1)
 
-    # Load master key and verify it decrypts correctly
-    master = load_master_key(offer_save=True)
-    file_key = derive_file_key(master)
-
-    # Decrypt all password fields for editing
-    try:
-        decrypted_content = transform_hosts(
-            original_content,
-            lambda pw: decrypt(file_key, pw),
-        )
-    except InvalidTag:
-        print("Error: wrong master password.")
-        print("Run 'amaster init' to re-encrypt your hosts file.")
-        sys.exit(1)
-
-    # Write plaintext to temp file (in-memory fs when available)
+    # Always use temp file so we can detect and encrypt any passwords added during editing
     shm = "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
     fd, tmp_path = tempfile.mkstemp(dir=shm, suffix=".hosts")
     os.chmod(tmp_path, 0o600)
@@ -84,18 +76,22 @@ def main():
     saved_ok = False
     try:
         with os.fdopen(fd, "w") as f:
-            f.write(decrypted_content)
+            f.write(original_content)
 
         subprocess.call(["vim", "-n", tmp_path])
 
         with open(tmp_path) as f:
             edited_content = f.read()
 
-        # Encrypt all password fields and write back
-        encrypted_content = transform_hosts(
-            edited_content,
-            lambda pw: encrypt(file_key, pw),
-        )
+        if has_password_fields(edited_content):
+            # Ensure we have a file key — user may have added passwords to an empty file
+            if file_key is None:
+                master = load_master_key(offer_save=True)
+                file_key = derive_file_key(master)
+            encrypted_content = transform_hosts(edited_content, lambda pw: encrypt(file_key, pw))
+        else:
+            encrypted_content = edited_content
+
         wfd = os.open(host_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(wfd, "w") as f:
             f.write(encrypted_content)
