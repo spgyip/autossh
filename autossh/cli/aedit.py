@@ -6,9 +6,8 @@ import tempfile
 
 import autossh.config
 from autossh.master import (
-    ENV_KEY,
     decrypt, encrypt, is_encrypted,
-    derive_file_key, load_dotenv, load_master_key, transform_hosts,
+    derive_file_key, load_master_key, transform_hosts,
 )
 from cryptography.exceptions import InvalidTag
 
@@ -67,13 +66,9 @@ def main():
     with open(host_file) as f:
         original_content = f.read()
 
-    # Decide encryption mode: use it if master is already configured OR file has enc: fields
-    load_dotenv()
-    has_master = bool(os.environ.get(ENV_KEY))
+    # Enter encryption mode only when the file already has enc:v1: fields
     has_enc = _first_encrypted_pw(original_content) is not None
-    use_encryption = has_enc or has_master
-
-    if not use_encryption:
+    if not has_enc:
         os.execvp("vim", ["vim", host_file])
         return  # unreachable
 
