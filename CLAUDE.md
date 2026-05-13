@@ -24,7 +24,7 @@ PYTHONPATH=. python3 bin/assh <destination>
 
 There is no separate lint/test runner — `autossh/lookup.py` has an `if __name__ == "__main__"` block that serves as the only test, exercising host/alias/port parsing against an inline sample.
 
-Runtime dependencies (declared in `setup.py`): `pexpect`, `pyyaml`.
+Runtime dependencies (declared in `setup.py`): `pexpect`, `pyyaml`, `cryptography`.
 
 ## Architecture
 
@@ -34,6 +34,7 @@ All SSH/SCP behavior lives in the `autossh` package.
 
 - **`autossh/ssh.py` — `SSH` class**: the core. `login()` spawns `ssh`, `jump()` issues an `ssh` command inside an already-logged-in session (intended for bastion-hopping), and `send_file()`/`pull_file()` spawn `scp`. All four methods drive a `pexpect.expect()` loop against the same default pattern list: `["yes/no", "assword:", "[#\$]", TIMEOUT, EOF]`. `login()`/`jump()` accept `expects`/`reacts` extension arrays — extra patterns are appended after the defaults, and the matching `reacts` entry (a string or a zero-arg callable) is `sendline`'d when matched. Custom auth flows (e.g. a 2FA token prompt on a bastion) can be layered on top via this extension mechanism without editing `ssh.py` — historically a `qssh` command lived here doing exactly that, but it was removed for being too site-specific.
 - **`autossh/lookup.py` — `Lookup`**: parses the host file. Each non-comment line is `host[:port][[alias]]  user  password`. Two dicts are maintained (`__m0` keyed by host, `__m1` keyed by alias); `get()` checks host first, then alias. `port` is the string `0` when unset — callers in `ssh.py` test `port != 0` to decide whether to add `-p` / `-P`.
+- **`autossh/master.py`**: password encryption layer. Uses AES-256-GCM (`cryptography`) with a per-installation salt file (`~/.config/autossh/.salt`) and scrypt KDF. `derive_file_key(master)` is called once per invocation; the result is used for all `encrypt()`/`decrypt()` calls in that session. Encrypted passwords are stored as `enc:v1:<base64>` in the hosts file. Master key is loaded from `~/.config/autossh/.env` → `ASSH_MASTER_KEY` env var → interactive prompt. `transform_hosts(content, fn)` applies `fn(password)` to every valid host line while preserving comments and layout.
 - **`autossh/config.py`**: loads `~/.config/autossh/config.yaml` (currently only `timeout`); defaults are returned silently on any error.
 - **`autossh/winsize.py` — `WatchDog`**: SIGWINCH-based terminal resize forwarding to the pexpect child. Enabled via `SSH.autowinsize()`; every interactive CLI calls this before `interact()`.
 
@@ -48,6 +49,7 @@ All SSH/SCP behavior lives in the `autossh` package.
 
 - Host file: `~/.config/autossh/hosts` (override via `config.yaml` → `host_file`). Sample at `config/autossh/hosts`. If absent, `aedit` seeds a commented template on first run.
 - autossh config: `~/.config/autossh/config.yaml` (keys: `timeout`).
+- Master key: `~/.config/autossh/.env` (key `ASSH_MASTER_KEY`; chmod 0600). Salt: `~/.config/autossh/.salt` (16 bytes random; auto-created on first encryption).
 
 User `None` and password `None` (literal strings) mean anonymous — `ssh.py` branches on `user == "None"` to drop the `user@` prefix.
 
