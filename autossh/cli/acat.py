@@ -3,7 +3,7 @@ import sys
 import autossh.config
 import autossh.lookup
 from autossh.master import (
-    is_encrypted, decrypt, derive_file_key, load_master_key, transform_hosts,
+    decrypt, derive_file_key, load_master_key, has_password_fields, transform_hosts,
 )
 from cryptography.exceptions import InvalidTag
 
@@ -37,12 +37,11 @@ def main():
             print("Host not found '%s'." % (destination))
             return
         host, port, user, password = info
-        if is_encrypted(password):
-            try:
-                password = decrypt(_get_file_key(), password)
-            except InvalidTag:
-                print("Error: wrong master password.")
-                sys.exit(1)
+        try:
+            password = decrypt(_get_file_key(), password)
+        except InvalidTag:
+            print("Error: wrong master password.")
+            sys.exit(1)
         print((host, port, user, password))
     else:
         try:
@@ -51,12 +50,12 @@ def main():
         except IOError:
             print("None")
             return
-        if "enc:v1:" in content:
+        if has_password_fields(content):
             try:
                 file_key = _get_file_key()
                 content = transform_hosts(
                     content,
-                    lambda pw: decrypt(file_key, pw) if is_encrypted(pw) else pw,
+                    lambda pw: decrypt(file_key, pw),
                 )
             except InvalidTag:
                 print("Error: wrong master password.")

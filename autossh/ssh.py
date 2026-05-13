@@ -21,14 +21,12 @@ class SSH:
         self.__lu = lookup.load(os.path.expanduser(self.__c.host_file))
 
     def _resolve_password(self, password):
-        """Decrypt password if encrypted; prompt for master key as needed."""
-        if not _master.is_encrypted(password):
-            return True, password
+        """Decrypt password using master key."""
         try:
             key = _master.derive_file_key(_master.load_master_key())
             return True, _master.decrypt(key, password)
         except Exception:
-            return False, "Wrong master password."
+            return False, "Wrong master password. Run 'amaster init' to encrypt your hosts file."
 
     def close(self):
         if self.__child is None:

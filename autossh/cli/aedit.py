@@ -6,8 +6,8 @@ import tempfile
 
 import autossh.config
 from autossh.master import (
-    decrypt, encrypt, is_encrypted,
-    derive_file_key, load_master_key, transform_hosts,
+    decrypt, encrypt,
+    derive_file_key, load_master_key, has_password_fields, transform_hosts,
 )
 from cryptography.exceptions import InvalidTag
 
@@ -29,16 +29,6 @@ HOSTS_TEMPLATE = """\
 # 192.168.0.5:22[dev5]   root    password5          ## port + alias
 # 192.168.0.6            None    None               ## anonymous
 """
-
-
-def _first_encrypted_pw(content):
-    for line in content.splitlines():
-        cp = line.find("#")
-        data = line[:cp] if cp >= 0 else line
-        fields = data.split()
-        if len(fields) == 3 and is_encrypted(fields[2]):
-            return fields[2]
-    return None
 
 
 def main():
@@ -66,28 +56,25 @@ def main():
     with open(host_file) as f:
         original_content = f.read()
 
-    # Enter encryption mode only when the file already has enc:v1: fields
-    has_enc = _first_encrypted_pw(original_content) is not None
-    if not has_enc:
+    # No password fields — open directly in vim (nothing to encrypt/decrypt)
+    if not has_password_fields(original_content):
         os.execvp("vim", ["vim", host_file])
         return  # unreachable
 
-    # Load and verify master key
+    # Load master key and verify it decrypts correctly
     master = load_master_key(offer_save=True)
     file_key = derive_file_key(master)
 
-    if has_enc:
-        try:
-            decrypt(file_key, _first_encrypted_pw(original_content))
-        except InvalidTag:
-            print("Error: wrong master password.")
-            sys.exit(1)
-
-    # Decrypt all enc: fields for editing
-    decrypted_content = transform_hosts(
-        original_content,
-        lambda pw: decrypt(file_key, pw) if is_encrypted(pw) else pw,
-    )
+    # Decrypt all password fields for editing
+    try:
+        decrypted_content = transform_hosts(
+            original_content,
+            lambda pw: decrypt(file_key, pw),
+        )
+    except InvalidTag:
+        print("Error: wrong master password.")
+        print("Run 'amaster init' to re-encrypt your hosts file.")
+        sys.exit(1)
 
     # Write plaintext to temp file (in-memory fs when available)
     shm = "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
@@ -107,7 +94,7 @@ def main():
         # Encrypt all password fields and write back
         encrypted_content = transform_hosts(
             edited_content,
-            lambda pw: pw if is_encrypted(pw) else encrypt(file_key, pw),
+            lambda pw: encrypt(file_key, pw),
         )
         wfd = os.open(host_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(wfd, "w") as f:

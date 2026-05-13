@@ -7,7 +7,6 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 ENV_KEY = "ASSH_MASTER_KEY"
-ENC_PREFIX = "enc:v1:"
 SALT_FILE = os.path.expanduser("~/.config/autossh/.salt")
 DOTENV_FILE = os.path.expanduser("~/.config/autossh/.env")
 
@@ -35,24 +34,30 @@ def derive_file_key(master):
 # ── Encrypt / decrypt ─────────────────────────────────────────────────────────
 
 def encrypt(file_key, plaintext):
-    """Return enc:v1:<base64(nonce+ct+tag)>."""
+    """Return base64(nonce+ct+tag) — no prefix."""
     nonce = os.urandom(12)
     ct = AESGCM(file_key).encrypt(nonce, plaintext.encode(), None)
-    return ENC_PREFIX + base64.b64encode(nonce + ct).decode()
+    return base64.b64encode(nonce + ct).decode()
 
 
-def decrypt(file_key, enc_str):
-    """Decrypt enc:v1:… string. Raises InvalidTag on wrong key."""
-    blob = base64.b64decode(enc_str[len(ENC_PREFIX):])
+def decrypt(file_key, ciphertext_b64):
+    """Decrypt base64-encoded ciphertext. Raises InvalidTag on wrong key."""
+    blob = base64.b64decode(ciphertext_b64)
     nonce, ct = blob[:12], blob[12:]
     return AESGCM(file_key).decrypt(nonce, ct, None).decode()
 
 
-def is_encrypted(s):
-    return s.startswith(ENC_PREFIX)
+# ── Hosts file helpers ────────────────────────────────────────────────────────
 
+def has_password_fields(content):
+    """Return True if the hosts file has any non-comment 3-field lines."""
+    for line in content.splitlines():
+        cp = line.find("#")
+        data = line[:cp] if cp >= 0 else line
+        if len(data.split()) == 3:
+            return True
+    return False
 
-# ── Hosts file transformation ─────────────────────────────────────────────────
 
 def transform_hosts(content, transform_fn):
     """Apply transform_fn(password) to every valid host-line password field."""
