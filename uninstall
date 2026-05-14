@@ -3,4 +3,4 @@
 pip3 uninstall autossh
 
 echo "Removing scripts..."
-rm -fv ~/bin/assh ~/bin/acat ~/bin/aedit ~/bin/apush ~/bin/apull ~/bin/qssh
+rm -fv ~/bin/assh ~/bin/acat ~/bin/aedit ~/bin/apush ~/bin/apull ~/bin/amaster

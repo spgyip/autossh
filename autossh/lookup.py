@@ -3,7 +3,7 @@ def load(fpath):
     lu = Lookup()
     ok, _ = lu.loadFromFile(fpath)
     if not ok:
-        print("WARNING: Lookup::load from \"%s\" fail."%(fpath))
+        print("WARNING: host file \"%s\" not found. Run `aedit` to create one." % (fpath))
     return lu
 
 class Lookup:

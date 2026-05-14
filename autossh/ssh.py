@@ -4,6 +4,7 @@ import pexpect
 import yaml
 from . import config
 from . import lookup
+from . import master as _master
 from . import winsize
 
 def new(destination):
@@ -18,6 +19,14 @@ class SSH:
         self.__c = config.load()
         self.__timeout = self.__c.timeout
         self.__lu = lookup.load(os.path.expanduser(self.__c.host_file))
+
+    def _resolve_password(self, password):
+        """Decrypt password using master key."""
+        try:
+            key = _master.derive_file_key(_master.load_master_key())
+            return True, _master.decrypt(key, password)
+        except Exception:
+            return False, "Wrong master password. Run 'amaster init' to encrypt your hosts file."
 
     def close(self):
         if self.__child is None:
@@ -54,8 +63,10 @@ class SSH:
         host = info[0]
         port = info[1]
         user = info[2]
-        password = info[3]
-     
+        ok, password = self._resolve_password(info[3])
+        if not ok:
+            return False, password
+
         # args
         args = []
         if user=="None":
@@ -110,7 +121,9 @@ class SSH:
         host = info[0]
         port = info[1]
         user = info[2]
-        password = info[3]
+        ok, password = self._resolve_password(info[3])
+        if not ok:
+            return False, password
 
         # cmdline
         cmdline = ""
@@ -172,7 +185,9 @@ class SSH:
         host = info[0]
         port = info[1]
         user = info[2]
-        password = info[3]
+        ok, password = self._resolve_password(info[3])
+        if not ok:
+            return False, password
 
         if port==0:
             self.__child = pexpect.spawn("scp", [src, "%s@%s:%s"%(user, host, dst)])
@@ -216,8 +231,10 @@ class SSH:
         host = info[0]
         port = info[1]
         user = info[2]
-        password = info[3]
-    
+        ok, password = self._resolve_password(info[3])
+        if not ok:
+            return False, password
+
         if port==0:
             self.__child = pexpect.spawn("scp", ["%s@%s:%s"%(user, host, src), dst])
         else:
