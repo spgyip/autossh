@@ -5,7 +5,7 @@ with open("README.md", encoding="utf-8") as f:
 
 setuptools.setup(
     name="autossh",
-    version="1.4.4",
+    version="1.5.0",
     description="Auto-SSH toolkits with alias-based host management and password encryption",
     long_description=long_description,
     long_description_content_type="text/markdown",
