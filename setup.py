@@ -4,7 +4,7 @@ with open("README.md", encoding="utf-8") as f:
     long_description = f.read()
 
 setuptools.setup(
-    name="autossh",
+    name="autossh-cli",
     version="1.5.0",
     description="Auto-SSH toolkits with alias-based host management and password encryption",
     long_description=long_description,
