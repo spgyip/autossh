@@ -29,7 +29,8 @@ class SSH:
     def _resolve_password(self, password):
         """Decrypt password using master key."""
         try:
-            master = _master.load_master_key(cfg=self.__c)
+            verify_fn = _master.make_verifier_for(self.__salt, password)
+            master = _master.load_master_key(cfg=self.__c, verify_fn=verify_fn)
             key = _master.derive_file_key(master, self.__salt)
             return True, _master.decrypt(key, password)
         except Exception:

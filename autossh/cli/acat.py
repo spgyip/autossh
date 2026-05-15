@@ -5,13 +5,13 @@ import autossh.config
 import autossh.lookup
 from autossh.master import (
     decrypt, derive_file_key, get_salt, load_master_key,
-    has_password_fields, transform_hosts,
+    has_password_fields, make_verifier, transform_hosts,
 )
 from cryptography.exceptions import InvalidTag
 
 
 def _get_file_key(cfg, content):
-    master = load_master_key(cfg=cfg)
+    master = load_master_key(cfg=cfg, verify_fn=make_verifier(content))
     return derive_file_key(master, get_salt(content))
 
 

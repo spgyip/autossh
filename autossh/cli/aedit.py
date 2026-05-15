@@ -9,7 +9,7 @@ import autossh.config
 from autossh.master import (
     decrypt, encrypt,
     derive_file_key, get_salt, inject_salt,
-    load_master_key, has_password_fields, transform_hosts,
+    load_master_key, has_password_fields, make_verifier, transform_hosts,
 )
 from cryptography.exceptions import InvalidTag
 
@@ -65,7 +65,10 @@ def main():
     # If original file has password fields, load master key and decrypt for editing
     file_key = None
     if has_password_fields(original_content):
-        master = load_master_key(offer_save=True, cfg=c)
+        master = load_master_key(
+            offer_save=True, cfg=c,
+            verify_fn=make_verifier(original_content),
+        )
         file_key = derive_file_key(master, salt)
         try:
             original_content = transform_hosts(original_content, lambda pw: decrypt(file_key, pw))
