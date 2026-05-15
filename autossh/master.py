@@ -263,6 +263,7 @@ def load_master_key(offer_save=True, cfg=None):
         if master:
             return master
         if offer_save and cfg is not None:
+            print("No master key provider configured yet — setting one up now.")
             while True:
                 new_provider = prompt_provider()
                 existing = _try_load_from_provider(new_provider, cfg)
