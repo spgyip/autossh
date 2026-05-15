@@ -305,8 +305,10 @@ def load_master_key(offer_save=True, cfg=None):
 
     if provider == "op":
         if not _op_available():
-            print("Warning: op CLI not found, falling back to prompt (no save).")
-            return getpass.getpass("Master password: ")
+            print("Error: op CLI not found, but master_key_provider=op is configured.")
+            print("Install 1Password CLI (`op`), or run `amaster` to switch providers.")
+            import sys
+            sys.exit(1)
         master = op_read(cfg.op_secret_ref)
         if master:
             return master
