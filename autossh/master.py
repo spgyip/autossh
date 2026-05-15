@@ -13,23 +13,50 @@ SALT_FILE = os.path.expanduser("~/.config/autossh/.salt")
 DOTENV_FILE = os.path.expanduser("~/.config/autossh/.env")
 
 
-# ── Key derivation ────────────────────────────────────────────────────────────
+# ── Salt management ──────────────────────────────────────────────────────────
 
-def _load_or_create_salt():
+SALT_HEADER = "## SALT:"
+
+
+def extract_salt(content):
+    """Return salt bytes from a '## SALT: <hex>' line in content, else None."""
+    for line in content.splitlines():
+        s = line.strip()
+        if s.startswith(SALT_HEADER):
+            try:
+                return bytes.fromhex(s[len(SALT_HEADER):].strip())
+            except ValueError:
+                return None
+    return None
+
+
+def inject_salt(content, salt):
+    """Return content with a SALT header at top; replaces any existing one."""
+    salt_line = f"{SALT_HEADER} {salt.hex()}\n"
+    out = [l for l in content.splitlines(keepends=True)
+           if not l.strip().startswith(SALT_HEADER)]
+    return salt_line + "".join(out)
+
+
+def get_salt(content):
+    """Resolve salt for the given hosts content.
+
+    Priority: embedded SALT header > legacy .salt file > new random salt.
+    Does not write to disk; the caller persists via inject_salt() on write.
+    """
+    salt = extract_salt(content)
+    if salt is not None:
+        return salt
     if os.path.exists(SALT_FILE):
         with open(SALT_FILE, "rb") as f:
             return f.read()
-    salt = os.urandom(16)
-    os.makedirs(os.path.dirname(SALT_FILE), exist_ok=True)
-    fd = os.open(SALT_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as f:
-        f.write(salt)
-    return salt
+    return os.urandom(16)
 
 
-def derive_file_key(master):
-    """Derive 32-byte AES key from master password via scrypt (run once per session)."""
-    salt = _load_or_create_salt()
+# ── Key derivation ────────────────────────────────────────────────────────────
+
+def derive_file_key(master, salt):
+    """Derive 32-byte AES key from master password via scrypt."""
     return Scrypt(salt=salt, length=32, n=2**14, r=8, p=1).derive(master.encode())
 
 

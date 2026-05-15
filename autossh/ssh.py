@@ -18,12 +18,19 @@ class SSH:
         self.__wd = None
         self.__c = config.load()
         self.__timeout = self.__c.timeout
-        self.__lu = lookup.load(os.path.expanduser(self.__c.host_file))
+        host_file = os.path.expanduser(self.__c.host_file)
+        try:
+            with open(host_file) as f:
+                self.__salt = _master.get_salt(f.read())
+        except IOError:
+            self.__salt = None
+        self.__lu = lookup.load(host_file)
 
     def _resolve_password(self, password):
         """Decrypt password using master key."""
         try:
-            key = _master.derive_file_key(_master.load_master_key(cfg=self.__c))
+            master = _master.load_master_key(cfg=self.__c)
+            key = _master.derive_file_key(master, self.__salt)
             return True, _master.decrypt(key, password)
         except Exception:
             return False, "Wrong master password. Run 'amaster' to set a new one."

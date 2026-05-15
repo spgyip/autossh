@@ -4,14 +4,15 @@ import autossh
 import autossh.config
 import autossh.lookup
 from autossh.master import (
-    decrypt, derive_file_key, load_master_key, has_password_fields, transform_hosts,
+    decrypt, derive_file_key, get_salt, load_master_key,
+    has_password_fields, transform_hosts,
 )
 from cryptography.exceptions import InvalidTag
 
 
-def _get_file_key(cfg):
+def _get_file_key(cfg, content):
     master = load_master_key(offer_save=False, cfg=cfg)
-    return derive_file_key(master)
+    return derive_file_key(master, get_salt(content))
 
 
 def main():
@@ -32,7 +33,14 @@ def main():
         destination = sys.argv[1]
 
     c = autossh.config.load()
-    lu = autossh.lookup.load(os.path.expanduser(c.host_file))
+    host_file = os.path.expanduser(c.host_file)
+    try:
+        with open(host_file) as f:
+            content = f.read()
+    except IOError:
+        print("None")
+        return
+    lu = autossh.lookup.load(host_file)
 
     if len(destination) > 0:
         ok, info = lu.get(destination)
@@ -41,21 +49,15 @@ def main():
             return
         host, port, user, password = info
         try:
-            password = decrypt(_get_file_key(c), password)
+            password = decrypt(_get_file_key(c, content), password)
         except InvalidTag:
             print("Error: wrong master password.")
             sys.exit(1)
         print((host, port, user, password))
     else:
-        try:
-            with open(os.path.expanduser(c.host_file)) as f:
-                content = f.read()
-        except IOError:
-            print("None")
-            return
         if has_password_fields(content):
             try:
-                file_key = _get_file_key(c)
+                file_key = _get_file_key(c, content)
                 content = transform_hosts(
                     content,
                     lambda pw: decrypt(file_key, pw),

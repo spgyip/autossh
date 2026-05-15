@@ -5,7 +5,7 @@ import autossh
 import autossh.config
 from autossh.master import (
     decrypt, encrypt,
-    derive_file_key,
+    derive_file_key, get_salt, inject_salt,
     has_password_fields, transform_hosts,
     prompt_provider, save_master_for_provider,
 )
@@ -48,8 +48,9 @@ def cmd_rekey(host_file):
         sys.exit(0)
 
     cfg = autossh.config.load()
+    salt = get_salt(content)
     cur_master = getpass.getpass("Current master password: ")
-    cur_key = derive_file_key(cur_master)
+    cur_key = derive_file_key(cur_master, salt)
 
     try:
         transform_hosts(content, lambda pw: decrypt(cur_key, pw))
@@ -59,12 +60,13 @@ def cmd_rekey(host_file):
 
     provider = prompt_provider()
     new_master = _prompt_new_master()
-    new_key = derive_file_key(new_master)
+    new_key = derive_file_key(new_master, salt)
 
     new_content = transform_hosts(
         content,
         lambda pw: encrypt(new_key, decrypt(cur_key, pw)),
     )
+    new_content = inject_salt(new_content, salt)
     _write_host_file(host_file, new_content)
     print("Master password updated.")
 
