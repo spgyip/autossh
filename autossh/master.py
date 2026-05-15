@@ -187,24 +187,23 @@ def prompt_provider():
 
 
 def save_master_for_provider(master, provider, cfg):
-    """Persist master key according to the chosen provider."""
+    """Persist master key according to the chosen provider. Returns True on success."""
     if provider == "op":
         if not _op_available():
-            print("Warning: op CLI not installed, saving to .env instead.")
-            save_to_dotenv(master)
-            print("Saved to ~/.config/autossh/.env")
-            return
+            print("Error: op CLI not found. Install 1Password CLI (`op`) and retry.")
+            return False
         ref = op_save(master, cfg.op_vault)
-        if ref:
-            print(f"Saved to 1Password ({ref})")
-        else:
-            print("Warning: 1Password save failed, saving to .env instead.")
-            save_to_dotenv(master)
-            print("Saved to ~/.config/autossh/.env")
-    elif provider == "dotenv":
+        if not ref:
+            print("Error: 1Password save failed. Check `op signin` and vault access.")
+            return False
+        print(f"Saved to 1Password ({ref})")
+        return True
+    if provider == "dotenv":
         save_to_dotenv(master)
         print("Saved to ~/.config/autossh/.env")
+        return True
     # provider == "prompt": nothing to save
+    return True
 
 
 # ── Master key loading ────────────────────────────────────────────────────────
@@ -225,6 +224,9 @@ def load_master_key(offer_save=True, cfg=None):
         if offer_save and cfg is not None:
             new_provider = prompt_provider()
             master = getpass.getpass("Master password: ")
+            while not save_master_for_provider(master, new_provider, cfg):
+                print()
+                new_provider = prompt_provider()
             cfg.master_key_provider = new_provider
             cfg.op_secret_ref = f"op://{cfg.op_vault}/autossh/master_key"
             try:
@@ -232,7 +234,6 @@ def load_master_key(offer_save=True, cfg=None):
                 _config.save(cfg)
             except Exception as e:
                 print(f"Warning: could not persist provider choice to config.yaml: {e}")
-            save_master_for_provider(master, new_provider, cfg)
             return master
         return getpass.getpass("Master password: ")
 

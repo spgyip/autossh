@@ -68,10 +68,13 @@ def cmd_rekey(host_file):
     _write_host_file(host_file, new_content)
     print("Master password updated.")
 
+    while not save_master_for_provider(new_master, provider, cfg):
+        print()
+        provider = prompt_provider()
+
     cfg.master_key_provider = provider
     cfg.op_secret_ref = f"op://{cfg.op_vault}/autossh/master_key"
     autossh.config.save(cfg)
-    save_master_for_provider(new_master, provider, cfg)
 
 
 def main():
