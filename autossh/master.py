@@ -235,11 +235,25 @@ def save_master_for_provider(master, provider, cfg):
 
 # ── Master key loading ────────────────────────────────────────────────────────
 
+def _try_load_from_provider(provider, cfg):
+    """Try to fetch an existing master key from the given provider. Returns None if absent."""
+    if provider == "dotenv":
+        load_dotenv()
+        return os.environ.get(ENV_KEY)
+    if provider == "op":
+        if not _op_available():
+            return None
+        return op_read(cfg.op_secret_ref)
+    return None  # "prompt": never has a stored key
+
+
 def load_master_key(offer_save=True, cfg=None):
     """Load master key using the configured provider.
 
     When cfg.master_key_provider is None and offer_save is True, prompts the
-    user once and then shows the provider-selection menu to persist the choice.
+    user to pick a provider; first attempts to load an existing key from that
+    provider (multi-machine sync case), and only prompts for the master if
+    nothing is stored there yet.
     """
     provider = getattr(cfg, "master_key_provider", None)
 
@@ -249,11 +263,20 @@ def load_master_key(offer_save=True, cfg=None):
         if master:
             return master
         if offer_save and cfg is not None:
-            new_provider = prompt_provider()
-            master = getpass.getpass("Master password: ")
-            while not save_master_for_provider(master, new_provider, cfg):
-                print()
+            while True:
                 new_provider = prompt_provider()
+                existing = _try_load_from_provider(new_provider, cfg)
+                if existing is not None:
+                    master = existing
+                    if new_provider == "op":
+                        print(f"Loaded from 1Password ({cfg.op_secret_ref})")
+                    elif new_provider == "dotenv":
+                        print("Loaded from ~/.config/autossh/.env")
+                    break
+                master = getpass.getpass("Master password: ")
+                if save_master_for_provider(master, new_provider, cfg):
+                    break
+                print()
             cfg.master_key_provider = new_provider
             cfg.op_secret_ref = f"op://{cfg.op_vault}/autossh/master_key"
             try:
