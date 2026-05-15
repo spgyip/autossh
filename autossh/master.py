@@ -197,7 +197,7 @@ def save_to_dotenv(master):
 
 def prompt_provider():
     """Interactive menu: returns 'dotenv' | 'op' | 'prompt'. Default is 'dotenv'."""
-    print("\nHow to save the master key?")
+    print("\nChoose the master key provider:")
     print("  1. Local .env file (default)")
     print("  2. 1Password (op CLI)")
     print("  3. Don't save (ask every time)")
