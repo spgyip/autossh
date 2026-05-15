@@ -277,6 +277,10 @@ def load_master_key(offer_save=True, cfg=None):
             print("No master key provider configured yet — setting one up now.")
             while True:
                 new_provider = prompt_provider()
+                if new_provider == "op" and not _op_available():
+                    print("Error: op CLI not found. Install 1Password CLI (`op`) and retry.")
+                    print()
+                    continue
                 existing = _try_load_from_provider(new_provider, cfg)
                 if existing is not None:
                     master = existing
