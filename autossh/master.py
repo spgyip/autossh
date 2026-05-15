@@ -355,6 +355,12 @@ def load_master_key(offer_save=True, cfg=None, verify_fn=None):
                     print("Pick a different provider, or fix the issue and retry.")
                     print()
                     continue
+                if new_provider == "op":
+                    print(f"No master key item found in 1Password at {cfg.op_secret_ref}.")
+                    print("Enter your master key — it will be saved to 1Password for future use.")
+                elif new_provider == "dotenv":
+                    print(f"ASSH_MASTER_KEY is not set in {DOTENV_FILE}.")
+                    print("Enter your master key — it will be saved to the .env file for future use.")
                 master = _prompt_master_with_verify(verify_fn)
                 if save_master_for_provider(master, new_provider, cfg):
                     break
