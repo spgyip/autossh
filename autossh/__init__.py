@@ -5,30 +5,40 @@ __version__ = "1.5.0"
 
 
 def _git_info():
-    """Return (commit, branch, dirty) from the source repo, or (None, None, False)."""
+    """Return (commit, branch, dirty).
+
+    Prefers live git when running from a source checkout, so dev commits show
+    up immediately. Falls back to build-time embedded values (populated by
+    setup.py) when installed via pip.
+    """
     import os
     import subprocess
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if not os.path.isdir(os.path.join(repo_root, ".git")):
-        return None, None, False
+
+    if os.path.isdir(os.path.join(repo_root, ".git")):
+        try:
+            commit = subprocess.run(
+                ["git", "-C", repo_root, "rev-parse", "--short", "HEAD"],
+                capture_output=True, text=True, timeout=2,
+            )
+            if commit.returncode == 0:
+                branch = subprocess.run(
+                    ["git", "-C", repo_root, "rev-parse", "--abbrev-ref", "HEAD"],
+                    capture_output=True, text=True, timeout=2,
+                )
+                status = subprocess.run(
+                    ["git", "-C", repo_root, "status", "--porcelain"],
+                    capture_output=True, text=True, timeout=2,
+                )
+                return (commit.stdout.strip(),
+                        branch.stdout.strip() if branch.returncode == 0 else None,
+                        bool(status.stdout.strip()))
+        except Exception:
+            pass
+
     try:
-        commit = subprocess.run(
-            ["git", "-C", repo_root, "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, timeout=2,
-        )
-        if commit.returncode != 0:
-            return None, None, False
-        branch = subprocess.run(
-            ["git", "-C", repo_root, "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, timeout=2,
-        )
-        status = subprocess.run(
-            ["git", "-C", repo_root, "status", "--porcelain"],
-            capture_output=True, text=True, timeout=2,
-        )
-        return (commit.stdout.strip(),
-                branch.stdout.strip() if branch.returncode == 0 else None,
-                bool(status.stdout.strip()))
+        from . import _build_info
+        return _build_info.commit, _build_info.branch, False
     except Exception:
         return None, None, False
 
