@@ -99,6 +99,37 @@ def has_password_fields(content):
     return False
 
 
+def first_ciphertext(content):
+    """Return the first encrypted password field from hosts content, or None."""
+    for line in content.splitlines():
+        cp = line.find("#")
+        data = line[:cp] if cp >= 0 else line
+        fields = data.split()
+        if len(fields) == 3:
+            return fields[2]
+    return None
+
+
+def make_verifier_for(salt, ciphertext_b64):
+    """Build verify(master)->bool that tests decryption of one ciphertext."""
+    def verify(master):
+        try:
+            decrypt(derive_file_key(master, salt), ciphertext_b64)
+            return True
+        except Exception:
+            return False
+    return verify
+
+
+def make_verifier(content):
+    """Build verify(master)->bool from hosts content, or None when there is
+    no encrypted entry to test against (e.g. fresh file)."""
+    pw = first_ciphertext(content)
+    if pw is None:
+        return None
+    return make_verifier_for(get_salt(content), pw)
+
+
 def transform_hosts(content, transform_fn):
     """Apply transform_fn(password) to every valid host-line password field."""
     return "".join(_transform_line(line, transform_fn)
@@ -275,7 +306,20 @@ def _try_load_from_provider(provider, cfg):
     return None, None  # "prompt": never has a stored key
 
 
-def load_master_key(offer_save=True, cfg=None):
+def _prompt_master_with_verify(verify_fn):
+    """Prompt for the master password, looping until verify_fn passes.
+
+    Returns the master string once verified. If verify_fn is None (e.g. fresh
+    file with no encrypted entries to test against), returns the first input.
+    """
+    while True:
+        master = getpass.getpass("Master password: ")
+        if verify_fn is None or verify_fn(master):
+            return master
+        print("Error: master password does not decrypt existing entries. Try again.")
+
+
+def load_master_key(offer_save=True, cfg=None, verify_fn=None):
     """Load master key using the configured provider.
 
     When cfg.master_key_provider is None and offer_save is True, prompts the
@@ -311,7 +355,13 @@ def load_master_key(offer_save=True, cfg=None):
                     print("Pick a different provider, or fix the issue and retry.")
                     print()
                     continue
-                master = getpass.getpass("Master password: ")
+                if new_provider == "op":
+                    print(f"No master key item found in 1Password at {cfg.op_secret_ref}.")
+                    print("Enter your master key — it will be saved to 1Password for future use.")
+                elif new_provider == "dotenv":
+                    print(f"ASSH_MASTER_KEY is not set in {DOTENV_FILE}.")
+                    print("Enter your master key — it will be saved to the .env file for future use.")
+                master = _prompt_master_with_verify(verify_fn)
                 if save_master_for_provider(master, new_provider, cfg):
                     break
                 print()
@@ -340,8 +390,11 @@ def load_master_key(offer_save=True, cfg=None):
             print("Run `op signin` to authenticate, or `amaster` to switch providers.")
             import sys
             sys.exit(1)
-        print(f"Master key not found in 1Password ({cfg.op_secret_ref}).")
-        master = getpass.getpass("Master password: ")
+        print(f"No master key item found in 1Password at {cfg.op_secret_ref}.")
+        print("If this is your first time using autossh on this machine, enter your")
+        print("master key — it will be saved to 1Password for future use.")
+        print("If you don't remember it, press Ctrl-C and run `amaster` to reset.")
+        master = _prompt_master_with_verify(verify_fn)
         ref = op_save(master, cfg.op_vault)
         if ref:
             print(f"Saved to 1Password ({ref})")
@@ -354,11 +407,14 @@ def load_master_key(offer_save=True, cfg=None):
         master = os.environ.get(ENV_KEY)
         if master:
             return master
-        print("Master key not found in ~/.config/autossh/.env.")
-        master = getpass.getpass("Master password: ")
+        print(f"ASSH_MASTER_KEY is not set in {DOTENV_FILE}.")
+        print("If this is your first time using autossh on this machine, enter your")
+        print("master key — it will be saved to the .env file for future use.")
+        print("If you don't remember it, press Ctrl-C and run `amaster` to reset.")
+        master = _prompt_master_with_verify(verify_fn)
         save_to_dotenv(master)
-        print("Saved to ~/.config/autossh/.env")
+        print(f"Saved to {DOTENV_FILE}")
         return master
 
     # provider == "prompt" or unknown
-    return getpass.getpass("Master password: ")
+    return _prompt_master_with_verify(verify_fn)
