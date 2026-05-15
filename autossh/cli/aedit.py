@@ -4,10 +4,12 @@ import subprocess
 import sys
 import tempfile
 
+import autossh
 import autossh.config
 from autossh.master import (
     decrypt, encrypt,
-    derive_file_key, load_master_key, has_password_fields, transform_hosts,
+    derive_file_key, get_salt, inject_salt,
+    load_master_key, has_password_fields, transform_hosts,
 )
 from cryptography.exceptions import InvalidTag
 
@@ -32,6 +34,8 @@ HOSTS_TEMPLATE = """\
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
+        autossh.print_version_and_exit("aedit")
     if len(sys.argv) > 1 and sys.argv[1] == "-h":
         print("")
         print("Usage:")
@@ -56,16 +60,18 @@ def main():
     with open(host_file) as f:
         original_content = f.read()
 
+    salt = get_salt(original_content)
+
     # If original file has password fields, load master key and decrypt for editing
     file_key = None
     if has_password_fields(original_content):
-        master = load_master_key(offer_save=True)
-        file_key = derive_file_key(master)
+        master = load_master_key(offer_save=True, cfg=c)
+        file_key = derive_file_key(master, salt)
         try:
             original_content = transform_hosts(original_content, lambda pw: decrypt(file_key, pw))
         except InvalidTag:
             print("Error: wrong master password.")
-            print("Run 'amaster init' to re-encrypt your hosts file.")
+            print("Run 'amaster' to set a new master password.")
             sys.exit(1)
 
     # Always use temp file so we can detect and encrypt any passwords added during editing
@@ -86,9 +92,10 @@ def main():
         if has_password_fields(edited_content):
             # Ensure we have a file key — user may have added passwords to an empty file
             if file_key is None:
-                master = load_master_key(offer_save=True)
-                file_key = derive_file_key(master)
+                master = load_master_key(offer_save=True, cfg=c)
+                file_key = derive_file_key(master, salt)
             encrypted_content = transform_hosts(edited_content, lambda pw: encrypt(file_key, pw))
+            encrypted_content = inject_salt(encrypted_content, salt)
         else:
             encrypted_content = edited_content
 

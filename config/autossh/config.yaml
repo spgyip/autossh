@@ -1,1 +1,7 @@
-timeout = 20
+timeout: 20
+
+## Master key provider: op | dotenv | prompt
+## If omitted, the legacy fallback (dotenv -> env var -> prompt) is used.
+# master_key_provider: op
+# op_secret_ref: "op://Personal/autossh/master_key"
+# op_vault: "Personal"

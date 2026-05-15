@@ -1,8 +1,11 @@
 import sys
+import autossh
 import autossh.ssh
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
+        autossh.print_version_and_exit("apull")
     if len(sys.argv) < 4 or (len(sys.argv) > 1 and sys.argv[1] == "-h"):
         print("")
         print("Usage:")

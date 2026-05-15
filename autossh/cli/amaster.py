@@ -1,15 +1,17 @@
 import getpass
-import os
 import sys
 
+import autossh
 import autossh.config
 from autossh.master import (
-    ENV_KEY, DOTENV_FILE,
     decrypt, encrypt,
-    derive_file_key, load_dotenv, save_to_dotenv,
+    derive_file_key, get_salt, inject_salt,
     has_password_fields, transform_hosts,
+    prompt_provider, save_master_for_provider,
 )
 from cryptography.exceptions import InvalidTag
+
+import os
 
 
 def _prompt_new_master():
@@ -19,23 +21,6 @@ def _prompt_new_master():
         if new_master == confirm:
             return new_master
         print("Passwords do not match, try again.")
-
-
-def _offer_dotenv_update(new_master):
-    load_dotenv()
-    dotenv_has_key = False
-    if os.path.exists(DOTENV_FILE):
-        with open(DOTENV_FILE) as f:
-            dotenv_has_key = any(l.startswith(ENV_KEY + "=") for l in f)
-
-    if dotenv_has_key or os.environ.get(ENV_KEY):
-        try:
-            ans = input("Update ASSH_MASTER_KEY in ~/.config/autossh/.env? [Y/n] ").strip().lower()
-        except EOFError:
-            ans = "y"
-        if ans != "n":
-            save_to_dotenv(new_master)
-            print("~/.config/autossh/.env updated.")
 
 
 def _load_host_file(host_file):
@@ -54,81 +39,57 @@ def _write_host_file(host_file, content):
         f.write(content)
 
 
-def _offer_dotenv_save(master):
-    """Always offer to save master key to .env."""
-    try:
-        ans = input("Save master key to ~/.config/autossh/.env? [Y/n] ").strip().lower()
-    except EOFError:
-        ans = "y"
-    if ans != "n":
-        save_to_dotenv(master)
-        print("~/.config/autossh/.env updated.")
-
-
-def cmd_init(host_file):
-    """Treat all passwords as plaintext and encrypt with a new master key."""
-    content = _load_host_file(host_file)
-
-    if not has_password_fields(content):
-        print("No password fields found in hosts file.")
-        sys.exit(0)
-
-    new_master = _prompt_new_master()
-    new_key = derive_file_key(new_master)
-
-    new_content = transform_hosts(content, lambda pw: encrypt(new_key, pw))
-    _write_host_file(host_file, new_content)
-    print("Hosts file encrypted.")
-
-    _offer_dotenv_save(new_master)
-
-
 def cmd_rekey(host_file):
     """Verify current master, then re-encrypt all passwords with a new master key."""
     content = _load_host_file(host_file)
 
     if not has_password_fields(content):
-        print("No password fields found. Use 'amaster init' to encrypt a plaintext hosts file.")
+        print("No password fields found. Run `aedit` to add hosts first.")
         sys.exit(0)
 
+    cfg = autossh.config.load()
+    salt = get_salt(content)
     cur_master = getpass.getpass("Current master password: ")
-    cur_key = derive_file_key(cur_master)
+    cur_key = derive_file_key(cur_master, salt)
 
-    # Verify by attempting to decrypt all fields
     try:
         transform_hosts(content, lambda pw: decrypt(cur_key, pw))
     except InvalidTag:
         print("Error: wrong current master password.")
         sys.exit(1)
 
+    provider = prompt_provider()
     new_master = _prompt_new_master()
-    new_key = derive_file_key(new_master)
+    new_key = derive_file_key(new_master, salt)
 
     new_content = transform_hosts(
         content,
         lambda pw: encrypt(new_key, decrypt(cur_key, pw)),
     )
+    new_content = inject_salt(new_content, salt)
     _write_host_file(host_file, new_content)
     print("Master password updated.")
 
-    _offer_dotenv_update(new_master)
+    while not save_master_for_provider(new_master, provider, cfg):
+        print()
+        provider = prompt_provider()
+
+    cfg.master_key_provider = provider
+    cfg.op_secret_ref = f"op://{cfg.op_vault}/autossh/master_key"
+    autossh.config.save(cfg)
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
+        autossh.print_version_and_exit("amaster")
     if len(sys.argv) > 1 and sys.argv[1] == "-h":
         print("")
         print("Usage:")
-        print("  amaster [-h] [init]")
+        print("  amaster [-h]")
         print("")
-        print("  amaster        Rekey: re-encrypt all passwords with a new master key")
-        print("  amaster init   Init: encrypt a plaintext hosts file for the first time")
+        print("  Re-encrypt all passwords with a new master key.")
         print("")
         sys.exit(0)
 
     c = autossh.config.load()
-    host_file = c.host_file
-
-    if len(sys.argv) > 1 and sys.argv[1] == "init":
-        cmd_init(host_file)
-    else:
-        cmd_rekey(host_file)
+    cmd_rekey(c.host_file)
