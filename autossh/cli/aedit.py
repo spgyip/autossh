@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 
+import autossh
 import autossh.config
 from autossh.master import (
     decrypt, encrypt,
@@ -32,6 +33,8 @@ HOSTS_TEMPLATE = """\
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
+        autossh.print_version_and_exit("aedit")
     if len(sys.argv) > 1 and sys.argv[1] == "-h":
         print("")
         print("Usage:")

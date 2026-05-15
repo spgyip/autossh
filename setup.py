@@ -1,11 +1,15 @@
+import re
 import setuptools
 
 with open("README.md", encoding="utf-8") as f:
     long_description = f.read()
 
+with open("autossh/__init__.py", encoding="utf-8") as f:
+    version = re.search(r'^__version__\s*=\s*["\']([^"\']+)', f.read(), re.M).group(1)
+
 setuptools.setup(
     name="autossh-cli",
-    version="1.5.0",
+    version=version,
     description="Auto-SSH toolkits with alias-based host management and password encryption",
     long_description=long_description,
     long_description_content_type="text/markdown",

@@ -1,6 +1,7 @@
 import getpass
 import sys
 
+import autossh
 import autossh.config
 from autossh.master import (
     decrypt, encrypt,
@@ -74,6 +75,8 @@ def cmd_rekey(host_file):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
+        autossh.print_version_and_exit("amaster")
     if len(sys.argv) > 1 and sys.argv[1] == "-h":
         print("")
         print("Usage:")

@@ -1,5 +1,6 @@
 import os
 import sys
+import autossh
 import autossh.config
 import autossh.lookup
 from autossh.master import (
@@ -14,6 +15,8 @@ def _get_file_key(cfg):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
+        autossh.print_version_and_exit("acat")
     if len(sys.argv) > 1 and sys.argv[1] == "-h":
         print("")
         print("Usage:")
