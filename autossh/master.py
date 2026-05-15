@@ -30,12 +30,23 @@ def extract_salt(content):
     return None
 
 
+SALT_WARNING_LINES = (
+    "## DO NOT EDIT OR REMOVE the SALT line below.",
+    "## It is required to decrypt the passwords in this file.",
+)
+
+
 def inject_salt(content, salt):
-    """Return content with a SALT header at top; replaces any existing one."""
-    salt_line = f"{SALT_HEADER} {salt.hex()}\n"
+    """Return content with the SALT header (plus warning) at top.
+
+    Replaces any existing SALT header and previously-written warning lines
+    so the file stays clean across rewrites.
+    """
+    drop_prefixes = SALT_WARNING_LINES + (SALT_HEADER,)
     out = [l for l in content.splitlines(keepends=True)
-           if not l.strip().startswith(SALT_HEADER)]
-    return salt_line + "".join(out)
+           if not any(l.strip().startswith(p) for p in drop_prefixes)]
+    header = "\n".join(SALT_WARNING_LINES) + f"\n{SALT_HEADER} {salt.hex()}\n"
+    return header + "".join(out)
 
 
 def get_salt(content):
