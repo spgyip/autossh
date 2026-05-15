@@ -266,21 +266,30 @@ def load_master_key(offer_save=True, cfg=None):
 
     if provider == "op":
         if not _op_available():
-            print("Warning: op CLI not found, falling back to prompt.")
+            print("Warning: op CLI not found, falling back to prompt (no save).")
             return getpass.getpass("Master password: ")
         master = op_read(cfg.op_secret_ref)
         if master:
             return master
-        print(f"Warning: could not read from 1Password ({cfg.op_secret_ref}), falling back to prompt.")
-        return getpass.getpass("Master password: ")
+        print(f"Master key not found in 1Password ({cfg.op_secret_ref}).")
+        master = getpass.getpass("Master password: ")
+        ref = op_save(master, cfg.op_vault)
+        if ref:
+            print(f"Saved to 1Password ({ref})")
+        else:
+            print("Warning: 1Password save failed; key will be re-prompted next time.")
+        return master
 
     if provider == "dotenv":
         load_dotenv()
         master = os.environ.get(ENV_KEY)
         if master:
             return master
-        print("Warning: ASSH_MASTER_KEY not in .env, falling back to prompt.")
-        return getpass.getpass("Master password: ")
+        print("Master key not found in ~/.config/autossh/.env.")
+        master = getpass.getpass("Master password: ")
+        save_to_dotenv(master)
+        print("Saved to ~/.config/autossh/.env")
+        return master
 
     # provider == "prompt" or unknown
     return getpass.getpass("Master password: ")
