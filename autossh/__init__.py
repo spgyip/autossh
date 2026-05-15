@@ -1,7 +1,7 @@
 
 __all__ = ["ssh", "config", "lookup"]
 
-__version__ = "1.6.2"
+__version__ = "1.7.0"
 
 
 def _git_info():
