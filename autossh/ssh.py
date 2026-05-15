@@ -23,7 +23,7 @@ class SSH:
     def _resolve_password(self, password):
         """Decrypt password using master key."""
         try:
-            key = _master.derive_file_key(_master.load_master_key())
+            key = _master.derive_file_key(_master.load_master_key(cfg=self.__c))
             return True, _master.decrypt(key, password)
         except Exception:
             return False, "Wrong master password. Run 'amaster init' to encrypt your hosts file."

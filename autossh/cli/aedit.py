@@ -59,7 +59,7 @@ def main():
     # If original file has password fields, load master key and decrypt for editing
     file_key = None
     if has_password_fields(original_content):
-        master = load_master_key(offer_save=True)
+        master = load_master_key(offer_save=True, cfg=c)
         file_key = derive_file_key(master)
         try:
             original_content = transform_hosts(original_content, lambda pw: decrypt(file_key, pw))
@@ -86,7 +86,7 @@ def main():
         if has_password_fields(edited_content):
             # Ensure we have a file key — user may have added passwords to an empty file
             if file_key is None:
-                master = load_master_key(offer_save=True)
+                master = load_master_key(offer_save=True, cfg=c)
                 file_key = derive_file_key(master)
             encrypted_content = transform_hosts(edited_content, lambda pw: encrypt(file_key, pw))
         else:

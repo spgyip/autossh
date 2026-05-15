@@ -3,10 +3,10 @@ import os
 import sys
 
 import autossh.config
+import autossh.master as _m
 from autossh.master import (
-    ENV_KEY, DOTENV_FILE,
     decrypt, encrypt,
-    derive_file_key, load_dotenv, save_to_dotenv,
+    derive_file_key, load_master_key, save_to_dotenv,
     has_password_fields, transform_hosts,
 )
 from cryptography.exceptions import InvalidTag
@@ -21,21 +21,39 @@ def _prompt_new_master():
         print("Passwords do not match, try again.")
 
 
-def _offer_dotenv_update(new_master):
-    load_dotenv()
-    dotenv_has_key = False
-    if os.path.exists(DOTENV_FILE):
-        with open(DOTENV_FILE) as f:
-            dotenv_has_key = any(l.startswith(ENV_KEY + "=") for l in f)
-
-    if dotenv_has_key or os.environ.get(ENV_KEY):
+def _prompt_provider():
+    print("\nHow to save the master key?")
+    print("  1. 1Password (op CLI)")
+    print("  2. Local .env file")
+    print("  3. Don't save (ask every time)")
+    while True:
         try:
-            ans = input("Update ASSH_MASTER_KEY in ~/.config/autossh/.env? [Y/n] ").strip().lower()
+            ans = input("> ").strip()
         except EOFError:
-            ans = "y"
-        if ans != "n":
-            save_to_dotenv(new_master)
-            print("~/.config/autossh/.env updated.")
+            return "prompt"
+        if ans in ("1", "2", "3"):
+            return {"1": "op", "2": "dotenv", "3": "prompt"}[ans]
+        print("Please enter 1, 2, or 3.")
+
+
+def _save_master_for_provider(master, provider, cfg):
+    if provider == "op":
+        if not _m._op_available():
+            print("Warning: op CLI not installed, saving to .env instead.")
+            save_to_dotenv(master)
+            print("Saved to ~/.config/autossh/.env")
+            return
+        ref = _m.op_save(master, cfg.op_vault)
+        if ref:
+            print(f"Saved to 1Password ({ref})")
+        else:
+            print("Warning: 1Password save failed, saving to .env instead.")
+            save_to_dotenv(master)
+            print("Saved to ~/.config/autossh/.env")
+    elif provider == "dotenv":
+        save_to_dotenv(master)
+        print("Saved to ~/.config/autossh/.env")
+    # provider == "prompt": nothing to save
 
 
 def _load_host_file(host_file):
@@ -54,17 +72,6 @@ def _write_host_file(host_file, content):
         f.write(content)
 
 
-def _offer_dotenv_save(master):
-    """Always offer to save master key to .env."""
-    try:
-        ans = input("Save master key to ~/.config/autossh/.env? [Y/n] ").strip().lower()
-    except EOFError:
-        ans = "y"
-    if ans != "n":
-        save_to_dotenv(master)
-        print("~/.config/autossh/.env updated.")
-
-
 def cmd_init(host_file):
     """Treat all passwords as plaintext and encrypt with a new master key."""
     content = _load_host_file(host_file)
@@ -73,6 +80,8 @@ def cmd_init(host_file):
         print("No password fields found in hosts file.")
         sys.exit(0)
 
+    cfg = autossh.config.load()
+    provider = _prompt_provider()
     new_master = _prompt_new_master()
     new_key = derive_file_key(new_master)
 
@@ -80,7 +89,10 @@ def cmd_init(host_file):
     _write_host_file(host_file, new_content)
     print("Hosts file encrypted.")
 
-    _offer_dotenv_save(new_master)
+    cfg.master_key_provider = provider
+    cfg.op_secret_ref = f"op://{cfg.op_vault}/autossh/master_key"
+    autossh.config.save(cfg)
+    _save_master_for_provider(new_master, provider, cfg)
 
 
 def cmd_rekey(host_file):
@@ -91,16 +103,17 @@ def cmd_rekey(host_file):
         print("No password fields found. Use 'amaster init' to encrypt a plaintext hosts file.")
         sys.exit(0)
 
-    cur_master = getpass.getpass("Current master password: ")
+    cfg = autossh.config.load()
+    cur_master = load_master_key(offer_save=False, cfg=cfg)
     cur_key = derive_file_key(cur_master)
 
-    # Verify by attempting to decrypt all fields
     try:
         transform_hosts(content, lambda pw: decrypt(cur_key, pw))
     except InvalidTag:
         print("Error: wrong current master password.")
         sys.exit(1)
 
+    provider = _prompt_provider()
     new_master = _prompt_new_master()
     new_key = derive_file_key(new_master)
 
@@ -111,7 +124,10 @@ def cmd_rekey(host_file):
     _write_host_file(host_file, new_content)
     print("Master password updated.")
 
-    _offer_dotenv_update(new_master)
+    cfg.master_key_provider = provider
+    cfg.op_secret_ref = f"op://{cfg.op_vault}/autossh/master_key"
+    autossh.config.save(cfg)
+    _save_master_for_provider(new_master, provider, cfg)
 
 
 def main():

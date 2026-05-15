@@ -1,6 +1,8 @@
 import base64
 import getpass
 import os
+import shutil
+import subprocess
 
 from cryptography.exceptions import InvalidTag  # re-exported for callers
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -92,6 +94,42 @@ def _transform_line(line, transform_fn):
     return core + ending
 
 
+# ── 1Password helpers ────────────────────────────────────────────────────────
+
+def _op_available():
+    return shutil.which("op") is not None
+
+
+def op_read(secret_ref):
+    """Run `op read <ref>`, return master key string or None on failure."""
+    try:
+        r = subprocess.run(
+            ["op", "read", secret_ref],
+            capture_output=True, text=True, timeout=10,
+        )
+        return r.stdout.strip() if r.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def op_save(master, vault, title="autossh", field="master_key"):
+    """Create or update a 1Password item. Returns op:// reference or None."""
+    try:
+        check = subprocess.run(
+            ["op", "item", "get", title, "--vault", vault, "--fields", field],
+            capture_output=True, text=True, timeout=10,
+        )
+        if check.returncode == 0:
+            cmd = ["op", "item", "edit", title, "--vault", vault, f"{field}={master}"]
+        else:
+            cmd = ["op", "item", "create", "--category=password",
+                   f"--title={title}", f"--vault={vault}", f"{field}={master}"]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        return f"op://{vault}/{title}/{field}" if r.returncode == 0 else None
+    except Exception:
+        return None
+
+
 # ── .env helpers ─────────────────────────────────────────────────────────────
 
 def load_dotenv():
@@ -130,18 +168,46 @@ def save_to_dotenv(master):
 
 # ── Master key loading ────────────────────────────────────────────────────────
 
-def load_master_key(offer_save=True):
-    """Load master: DOTENV_FILE → env var → interactive prompt."""
-    load_dotenv()
-    master = os.environ.get(ENV_KEY)
-    if master:
+def load_master_key(offer_save=True, cfg=None):
+    """Load master key using the configured provider.
+
+    When cfg.master_key_provider is None (default), falls back to the legacy
+    3-tier chain: DOTENV_FILE → env var → interactive prompt.
+    """
+    provider = getattr(cfg, "master_key_provider", None)
+
+    if provider is None:
+        load_dotenv()
+        master = os.environ.get(ENV_KEY)
+        if master:
+            return master
+        master = getpass.getpass("Master password: ")
+        if offer_save:
+            try:
+                ans = input("Save to ~/.config/autossh/.env? [y/N] ").strip().lower()
+            except EOFError:
+                ans = ""
+            if ans == "y":
+                save_to_dotenv(master)
         return master
-    master = getpass.getpass("Master password: ")
-    if offer_save:
-        try:
-            ans = input("Save to ~/.config/autossh/.env? [y/N] ").strip().lower()
-        except EOFError:
-            ans = ""
-        if ans == "y":
-            save_to_dotenv(master)
-    return master
+
+    if provider == "op":
+        if not _op_available():
+            print("Warning: op CLI not found, falling back to prompt.")
+            return getpass.getpass("Master password: ")
+        master = op_read(cfg.op_secret_ref)
+        if master:
+            return master
+        print(f"Warning: could not read from 1Password ({cfg.op_secret_ref}), falling back to prompt.")
+        return getpass.getpass("Master password: ")
+
+    if provider == "dotenv":
+        load_dotenv()
+        master = os.environ.get(ENV_KEY)
+        if master:
+            return master
+        print("Warning: ASSH_MASTER_KEY not in .env, falling back to prompt.")
+        return getpass.getpass("Master password: ")
+
+    # provider == "prompt" or unknown
+    return getpass.getpass("Master password: ")

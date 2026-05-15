@@ -8,8 +8,8 @@ from autossh.master import (
 from cryptography.exceptions import InvalidTag
 
 
-def _get_file_key():
-    master = load_master_key(offer_save=False)
+def _get_file_key(cfg):
+    master = load_master_key(offer_save=False, cfg=cfg)
     return derive_file_key(master)
 
 
@@ -38,7 +38,7 @@ def main():
             return
         host, port, user, password = info
         try:
-            password = decrypt(_get_file_key(), password)
+            password = decrypt(_get_file_key(c), password)
         except InvalidTag:
             print("Error: wrong master password.")
             sys.exit(1)
@@ -52,7 +52,7 @@ def main():
             return
         if has_password_fields(content):
             try:
-                file_key = _get_file_key()
+                file_key = _get_file_key(c)
                 content = transform_hosts(
                     content,
                     lambda pw: decrypt(file_key, pw),
