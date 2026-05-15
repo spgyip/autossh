@@ -220,9 +220,9 @@ def load_master_key(offer_save=True, cfg=None):
         master = os.environ.get(ENV_KEY)
         if master:
             return master
-        master = getpass.getpass("Master password: ")
         if offer_save and cfg is not None:
             new_provider = prompt_provider()
+            master = getpass.getpass("Master password: ")
             cfg.master_key_provider = new_provider
             cfg.op_secret_ref = f"op://{cfg.op_vault}/autossh/master_key"
             try:
@@ -231,7 +231,8 @@ def load_master_key(offer_save=True, cfg=None):
             except Exception as e:
                 print(f"Warning: could not persist provider choice to config.yaml: {e}")
             save_master_for_provider(master, new_provider, cfg)
-        return master
+            return master
+        return getpass.getpass("Master password: ")
 
     if provider == "op":
         if not _op_available():
