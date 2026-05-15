@@ -26,7 +26,7 @@ class SSH:
             key = _master.derive_file_key(_master.load_master_key(cfg=self.__c))
             return True, _master.decrypt(key, password)
         except Exception:
-            return False, "Wrong master password. Run 'amaster init' to encrypt your hosts file."
+            return False, "Wrong master password. Run 'amaster' to set a new one."
 
     def close(self):
         if self.__child is None:

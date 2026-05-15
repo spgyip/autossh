@@ -166,13 +166,52 @@ def save_to_dotenv(master):
         f.writelines(lines)
 
 
+# ── Provider selection helpers ──────────────────────────────────────────────
+
+def prompt_provider():
+    """Interactive menu: returns 'op' | 'dotenv' | 'prompt'."""
+    print("\nHow to save the master key?")
+    print("  1. 1Password (op CLI)")
+    print("  2. Local .env file")
+    print("  3. Don't save (ask every time)")
+    while True:
+        try:
+            ans = input("> ").strip()
+        except EOFError:
+            return "prompt"
+        if ans in ("1", "2", "3"):
+            return {"1": "op", "2": "dotenv", "3": "prompt"}[ans]
+        print("Please enter 1, 2, or 3.")
+
+
+def save_master_for_provider(master, provider, cfg):
+    """Persist master key according to the chosen provider."""
+    if provider == "op":
+        if not _op_available():
+            print("Warning: op CLI not installed, saving to .env instead.")
+            save_to_dotenv(master)
+            print("Saved to ~/.config/autossh/.env")
+            return
+        ref = op_save(master, cfg.op_vault)
+        if ref:
+            print(f"Saved to 1Password ({ref})")
+        else:
+            print("Warning: 1Password save failed, saving to .env instead.")
+            save_to_dotenv(master)
+            print("Saved to ~/.config/autossh/.env")
+    elif provider == "dotenv":
+        save_to_dotenv(master)
+        print("Saved to ~/.config/autossh/.env")
+    # provider == "prompt": nothing to save
+
+
 # ── Master key loading ────────────────────────────────────────────────────────
 
 def load_master_key(offer_save=True, cfg=None):
     """Load master key using the configured provider.
 
-    When cfg.master_key_provider is None (default), falls back to the legacy
-    3-tier chain: DOTENV_FILE → env var → interactive prompt.
+    When cfg.master_key_provider is None and offer_save is True, prompts the
+    user once and then shows the provider-selection menu to persist the choice.
     """
     provider = getattr(cfg, "master_key_provider", None)
 
@@ -182,13 +221,16 @@ def load_master_key(offer_save=True, cfg=None):
         if master:
             return master
         master = getpass.getpass("Master password: ")
-        if offer_save:
+        if offer_save and cfg is not None:
+            new_provider = prompt_provider()
+            cfg.master_key_provider = new_provider
+            cfg.op_secret_ref = f"op://{cfg.op_vault}/autossh/master_key"
             try:
-                ans = input("Save to ~/.config/autossh/.env? [y/N] ").strip().lower()
-            except EOFError:
-                ans = ""
-            if ans == "y":
-                save_to_dotenv(master)
+                import autossh.config as _config
+                _config.save(cfg)
+            except Exception as e:
+                print(f"Warning: could not persist provider choice to config.yaml: {e}")
+            save_master_for_provider(master, new_provider, cfg)
         return master
 
     if provider == "op":

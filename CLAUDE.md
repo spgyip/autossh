@@ -47,9 +47,9 @@ All SSH/SCP behavior lives in the `autossh` package.
 
 ### Host file & config locations
 
-- Host file: `~/.config/autossh/hosts` (override via `config.yaml` → `host_file`). Sample at `config/autossh/hosts`. If absent, `aedit` seeds a commented template on first run. The password column always stores AES-256-GCM ciphertext (raw base64, no prefix). Use `amaster init` to encrypt a plaintext hosts file for the first time; use `amaster` (no args) to rekey with a new master password.
-- autossh config: `~/.config/autossh/config.yaml` (keys: `timeout`).
-- Master key: `~/.config/autossh/.env` (key `ASSH_MASTER_KEY`; chmod 0600). Salt: `~/.config/autossh/.salt` (16 bytes random; auto-created on first encryption).
+- Host file: `~/.config/autossh/hosts` (override via `config.yaml` → `host_file`). Sample at `config/autossh/hosts`. If absent, `aedit` seeds a commented template on first run. The password column always stores AES-256-GCM ciphertext (raw base64, no prefix). On first use (any command that needs the master key), the user is prompted for a master password and chooses where it is stored: 1Password (via `op` CLI), local `.env` file, or no-save (prompt every time). The choice is persisted in `config.yaml` as `master_key_provider`. Use `amaster` to rekey with a new master password (and optionally switch provider).
+- autossh config: `~/.config/autossh/config.yaml` (keys: `timeout`, `master_key_provider`, `op_secret_ref`, `op_vault`).
+- Master key storage: depends on `master_key_provider` — `dotenv` → `~/.config/autossh/.env` (key `ASSH_MASTER_KEY`; chmod 0600); `op` → 1Password item referenced by `op_secret_ref`; `prompt` → not stored. Salt: `~/.config/autossh/.salt` (16 bytes random; auto-created on first encryption).
 
 User `None` and password `None` (literal strings) mean anonymous — `ssh.py` branches on `user == "None"` to drop the `user@` prefix.
 

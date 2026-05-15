@@ -65,7 +65,7 @@ def main():
             original_content = transform_hosts(original_content, lambda pw: decrypt(file_key, pw))
         except InvalidTag:
             print("Error: wrong master password.")
-            print("Run 'amaster init' to re-encrypt your hosts file.")
+            print("Run 'amaster' to set a new master password.")
             sys.exit(1)
 
     # Always use temp file so we can detect and encrypt any passwords added during editing
