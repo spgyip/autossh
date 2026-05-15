@@ -169,18 +169,20 @@ def save_to_dotenv(master):
 # ── Provider selection helpers ──────────────────────────────────────────────
 
 def prompt_provider():
-    """Interactive menu: returns 'op' | 'dotenv' | 'prompt'."""
+    """Interactive menu: returns 'dotenv' | 'op' | 'prompt'. Default is 'dotenv'."""
     print("\nHow to save the master key?")
-    print("  1. 1Password (op CLI)")
-    print("  2. Local .env file")
+    print("  1. Local .env file (default)")
+    print("  2. 1Password (op CLI)")
     print("  3. Don't save (ask every time)")
     while True:
         try:
             ans = input("> ").strip()
         except EOFError:
-            return "prompt"
+            return "dotenv"
+        if ans == "":
+            return "dotenv"
         if ans in ("1", "2", "3"):
-            return {"1": "op", "2": "dotenv", "3": "prompt"}[ans]
+            return {"1": "dotenv", "2": "op", "3": "prompt"}[ans]
         print("Please enter 1, 2, or 3.")
 
 
