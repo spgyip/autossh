@@ -139,15 +139,27 @@ def _op_available():
 
 
 def op_read(secret_ref):
-    """Run `op read <ref>`, return master key string or None on failure."""
+    """Run `op read <ref>`. Returns (master, error).
+
+    - (value, None) on success
+    - (None, None) when item is absent (legitimate first-time setup)
+    - (None, message) when the CLI call itself failed (not signed in, network,
+      vault permissions, etc.) — callers should surface `message` to the user
+      instead of silently falling back to a master-password prompt.
+    """
     try:
         r = subprocess.run(
             ["op", "read", secret_ref],
             capture_output=True, text=True, timeout=10,
         )
-        return r.stdout.strip() if r.returncode == 0 else None
-    except Exception:
-        return None
+    except Exception as e:
+        return None, str(e)
+    if r.returncode == 0:
+        return r.stdout.strip(), None
+    stderr = (r.stderr or "").strip()
+    if "isn't an item" in stderr or "no item found" in stderr.lower():
+        return None, None
+    return None, stderr or f"op read exited with status {r.returncode}"
 
 
 def op_save(master, vault, title="autossh", field="master_key"):
@@ -247,15 +259,20 @@ def save_master_for_provider(master, provider, cfg):
 # ── Master key loading ────────────────────────────────────────────────────────
 
 def _try_load_from_provider(provider, cfg):
-    """Try to fetch an existing master key from the given provider. Returns None if absent."""
+    """Try to fetch an existing master key from the given provider.
+
+    Returns (master, error). master=None with error=None means "not stored yet"
+    (legitimate first-run); error!=None means the provider call failed and the
+    caller should surface the message rather than silently re-prompting.
+    """
     if provider == "dotenv":
         load_dotenv()
-        return os.environ.get(ENV_KEY)
+        return os.environ.get(ENV_KEY), None
     if provider == "op":
         if not _op_available():
-            return None
+            return None, "op CLI not found"
         return op_read(cfg.op_secret_ref)
-    return None  # "prompt": never has a stored key
+    return None, None  # "prompt": never has a stored key
 
 
 def load_master_key(offer_save=True, cfg=None):
@@ -281,7 +298,7 @@ def load_master_key(offer_save=True, cfg=None):
                     print("Error: op CLI not found. Install 1Password CLI (`op`) and retry.")
                     print()
                     continue
-                existing = _try_load_from_provider(new_provider, cfg)
+                existing, load_err = _try_load_from_provider(new_provider, cfg)
                 if existing is not None:
                     master = existing
                     if new_provider == "op":
@@ -289,6 +306,11 @@ def load_master_key(offer_save=True, cfg=None):
                     elif new_provider == "dotenv":
                         print("Loaded from ~/.config/autossh/.env")
                     break
+                if load_err is not None:
+                    print(f"Error: failed to read from {new_provider}: {load_err}")
+                    print("Pick a different provider, or fix the issue and retry.")
+                    print()
+                    continue
                 master = getpass.getpass("Master password: ")
                 if save_master_for_provider(master, new_provider, cfg):
                     break
@@ -309,9 +331,15 @@ def load_master_key(offer_save=True, cfg=None):
             print("Install 1Password CLI (`op`), or run `amaster` to switch providers.")
             import sys
             sys.exit(1)
-        master = op_read(cfg.op_secret_ref)
+        master, err = op_read(cfg.op_secret_ref)
         if master:
             return master
+        if err is not None:
+            print(f"Error: failed to read master key from 1Password ({cfg.op_secret_ref}).")
+            print(f"  {err}")
+            print("Run `op signin` to authenticate, or `amaster` to switch providers.")
+            import sys
+            sys.exit(1)
         print(f"Master key not found in 1Password ({cfg.op_secret_ref}).")
         master = getpass.getpass("Master password: ")
         ref = op_save(master, cfg.op_vault)
