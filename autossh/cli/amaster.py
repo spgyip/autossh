@@ -5,7 +5,7 @@ import autossh
 import autossh.config
 from autossh.master import (
     decrypt, encrypt,
-    derive_file_key, load_master_key,
+    derive_file_key,
     has_password_fields, transform_hosts,
     prompt_provider, save_master_for_provider,
 )
@@ -48,7 +48,7 @@ def cmd_rekey(host_file):
         sys.exit(0)
 
     cfg = autossh.config.load()
-    cur_master = load_master_key(offer_save=False, cfg=cfg)
+    cur_master = getpass.getpass("Current master password: ")
     cur_key = derive_file_key(cur_master)
 
     try:
