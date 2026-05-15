@@ -11,7 +11,7 @@ from cryptography.exceptions import InvalidTag
 
 
 def _get_file_key(cfg, content):
-    master = load_master_key(offer_save=False, cfg=cfg)
+    master = load_master_key(cfg=cfg)
     return derive_file_key(master, get_salt(content))
 
 
